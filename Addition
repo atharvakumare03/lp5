@@ -1,0 +1,58 @@
+!nvcc --version
+
+%%writefile addition.cu
+#include <iostream>
+#include <cuda_runtime.h>
+
+// Kernel for vector addition
+__global__ void addVectors(int* A, int* B, int* C, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        C[i] = A[i] + B[i];
+    }
+}
+
+void vectorAddition() {
+    int n = 1000000;
+    int size = n * sizeof(int);
+    int *A, *B, *C, *d_A, *d_B, *d_C;
+
+    // Allocate pinned host memory for better data transfer performance
+    cudaMallocHost(&A, size);
+    cudaMallocHost(&B, size);
+    cudaMallocHost(&C, size);
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    for (int i = 0; i < n; i++) {
+        A[i] = i;
+        B[i] = i * 2;
+    }
+
+    cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
+
+    int blockSize = 256;
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    addVectors<<<numBlocks, blockSize>>>(d_A, d_B, d_C, n);
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
+
+    std::cout << "Vector Addition Result (First 10 values):\n";
+    for (int i = 0; i < 10; i++) std::cout << C[i] << " ";
+    std::cout << "\n";
+
+    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+    cudaFreeHost(A); cudaFreeHost(B); cudaFreeHost(C);
+}
+
+int main() {
+    vectorAddition();
+    return 0;
+}
+
+!nvcc -arch=sm_75 addition.cu -o addition
+
+!./addition
